@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { conversationsApi } from '@/api/conversations-api';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,340 +46,9 @@ import {
 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 
-// Mock conversation data
-const mockConversations = [
-  {
-    id: '1',
-    agentId: '1',
-    agentName: 'Customer Support Agent',
-    agentAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Felix',
-    customerName: 'John Smith',
-    customerEmail: 'john.smith@example.com',
-    customerPhone: '+1 (555) 123-4567',
-    customerCompany: 'Acme Inc.',
-    status: 'active',
-    lastMessage: 'I need help with my recent order #12345',
-    lastMessageTime: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-    unreadCount: 2,
-    messages: [
-      {
-        id: '101',
-        sender: 'customer',
-        content: 'Hello, I need help with my recent order #12345',
-        timestamp: new Date(Date.now() - 1000 * 60 * 10), // 10 minutes ago
-        read: true
-      },
-      {
-        id: '102',
-        sender: 'agent',
-        content: 'Hi John, I\'d be happy to help you with your order. Could you please provide more details about the issue you\'re experiencing?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 8), // 8 minutes ago
-        read: true
-      },
-      {
-        id: '103',
-        sender: 'customer',
-        content: 'I ordered a laptop last week, but I received a tablet instead.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 7), // 7 minutes ago
-        read: true
-      },
-      {
-        id: '104',
-        sender: 'agent',
-        content: 'I apologize for the mix-up. Let me check your order details.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 6), // 6 minutes ago
-        read: true
-      },
-      {
-        id: '105',
-        sender: 'customer',
-        content: 'Thank you. The order number is #12345.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-        read: false
-      }
-    ],
-    tags: ['order-issue', 'high-priority'],
-    isStarred: true,
-    isHandedOff: false
-  },
-  {
-    id: '2',
-    agentId: '2',
-    agentName: 'Sales Assistant',
-    agentAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Bella',
-    customerName: 'Emily Johnson',
-    customerEmail: 'emily.johnson@example.com',
-    customerPhone: '+1 (555) 987-6543',
-    customerCompany: 'Johnson & Co',
-    status: 'closed',
-    lastMessage: 'Thank you for your help!',
-    lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3 hours ago
-    unreadCount: 0,
-    messages: [
-      {
-        id: '201',
-        sender: 'customer',
-        content: 'Hi, I\'m interested in your premium subscription plan.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
-        read: true
-      },
-      {
-        id: '202',
-        sender: 'agent',
-        content: 'Hello Emily! I\'d be happy to tell you about our premium plans. What specific features are you looking for?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3.9), // 3.9 hours ago
-        read: true
-      },
-      {
-        id: '203',
-        sender: 'customer',
-        content: 'I need something that supports at least 10 team members and includes analytics.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3.8), // 3.8 hours ago
-        read: true
-      },
-      {
-        id: '204',
-        sender: 'agent',
-        content: 'Our Business plan sounds perfect for your needs. It supports up to 20 team members and includes advanced analytics. It\'s $49.99/month.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3.5), // 3.5 hours ago
-        read: true
-      },
-      {
-        id: '205',
-        sender: 'customer',
-        content: 'That sounds great! How do I sign up?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3.2), // 3.2 hours ago
-        read: true
-      },
-      {
-        id: '206',
-        sender: 'agent',
-        content: 'I\'ll send you a direct link to sign up. You can use the code WELCOME20 for a 20% discount on your first month!',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3.1), // 3.1 hours ago
-        read: true
-      },
-      {
-        id: '207',
-        sender: 'customer',
-        content: 'Thank you for your help!',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3 hours ago
-        read: true
-      }
-    ],
-    tags: ['sales-lead', 'converted'],
-    isStarred: false,
-    isHandedOff: false
-  },
-  {
-    id: '3',
-    agentId: '3',
-    agentName: 'Technical Support Agent',
-    agentAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Zoe',
-    customerName: 'Michael Brown',
-    customerEmail: 'michael.brown@example.com',
-    customerPhone: '+1 (555) 456-7890',
-    customerCompany: 'Tech Solutions Ltd',
-    status: 'handedOff',
-    lastMessage: 'I\'m still experiencing the same issue after trying those steps.',
-    lastMessageTime: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    unreadCount: 1,
-    messages: [
-      {
-        id: '301',
-        sender: 'customer',
-        content: 'I\'m having trouble connecting to the API. I keep getting a 403 error.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 45), // 45 minutes ago
-        read: true
-      },
-      {
-        id: '302',
-        sender: 'agent',
-        content: 'Hello Michael, I\'m sorry to hear you\'re having trouble. Let\'s troubleshoot this together. Have you checked if your API key is valid?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 43), // 43 minutes ago
-        read: true
-      },
-      {
-        id: '303',
-        sender: 'customer',
-        content: 'Yes, I\'ve verified the API key is correct. I can use it in Postman without issues.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 40), // 40 minutes ago
-        read: true
-      },
-      {
-        id: '304',
-        sender: 'agent',
-        content: 'Could you try clearing your browser cache and cookies? Also, check if you\'re including the correct headers in your request.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 35), // 35 minutes ago
-        read: true
-      },
-      {
-        id: '305',
-        sender: 'customer',
-        content: 'I\'m still experiencing the same issue after trying those steps.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-        read: false
-      },
-      {
-        id: '306',
-        sender: 'system',
-        content: 'This conversation has been handed off to a human agent.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 29), // 29 minutes ago
-        read: true
-      },
-      {
-        id: '307',
-        sender: 'human-agent',
-        content: 'Hi Michael, this is Sarah from our technical support team. I\'ll be taking over from our AI assistant to help resolve your API connection issue. Could you share your API endpoint and the exact error message you\'re seeing?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 25), // 25 minutes ago
-        read: true
-      }
-    ],
-    tags: ['technical-issue', 'api-problem', 'escalated'],
-    isStarred: true,
-    isHandedOff: true
-  },
-  {
-    id: '4',
-    agentId: '1',
-    agentName: 'Customer Support Agent',
-    agentAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Felix',
-    customerName: 'Sarah Wilson',
-    customerEmail: 'sarah.wilson@example.com',
-    customerPhone: '+1 (555) 789-0123',
-    customerCompany: 'Wilson Designs',
-    status: 'active',
-    lastMessage: 'When can I expect a response from your team?',
-    lastMessageTime: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-    unreadCount: 1,
-    messages: [
-      {
-        id: '401',
-        sender: 'customer',
-        content: 'I submitted a design request last week but haven\'t heard back.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 20), // 20 minutes ago
-        read: true
-      },
-      {
-        id: '402',
-        sender: 'agent',
-        content: 'Hello Sarah, I apologize for the delay. Let me check the status of your design request.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 18), // 18 minutes ago
-        read: true
-      },
-      {
-        id: '403',
-        sender: 'customer',
-        content: 'Thank you. The request number is #DR-789.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 17), // 17 minutes ago
-        read: true
-      },
-      {
-        id: '404',
-        sender: 'agent',
-        content: 'I see your request in our system. It\'s currently in the review stage. Our design team typically takes 7-10 business days to complete requests.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 16), // 16 minutes ago
-        read: true
-      },
-      {
-        id: '405',
-        sender: 'customer',
-        content: 'When can I expect a response from your team?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-        read: false
-      }
-    ],
-    tags: ['design-request', 'follow-up'],
-    isStarred: false,
-    isHandedOff: false
-  },
-  {
-    id: '5',
-    agentId: '2',
-    agentName: 'Sales Assistant',
-    agentAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Bella',
-    customerName: 'David Lee',
-    customerEmail: 'david.lee@example.com',
-    customerPhone: '+1 (555) 234-5678',
-    customerCompany: 'Lee Enterprises',
-    status: 'pending',
-    lastMessage: 'I\'ll think about it and get back to you.',
-    lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    unreadCount: 0,
-    messages: [
-      {
-        id: '501',
-        sender: 'customer',
-        content: 'What are the pricing options for your enterprise plan?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 25), // 25 hours ago
-        read: true
-      },
-      {
-        id: '502',
-        sender: 'agent',
-        content: 'Hello David! Our enterprise plan starts at $499/month and includes unlimited users, priority support, and custom integrations. Would you like me to send you a detailed brochure?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24.8), // 24.8 hours ago
-        read: true
-      },
-      {
-        id: '503',
-        sender: 'customer',
-        content: 'Yes, please send me the brochure. Also, do you offer any discounts for annual subscriptions?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24.5), // 24.5 hours ago
-        read: true
-      },
-      {
-        id: '504',
-        sender: 'agent',
-        content: 'Absolutely! We offer a 15% discount for annual subscriptions. I\'ll include that information in the brochure. Is there a specific email you\'d like me to send it to?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24.2), // 24.2 hours ago
-        read: true
-      },
-      {
-        id: '505',
-        sender: 'customer',
-        content: 'Please send it to david.lee@example.com. What\'s the typical onboarding process like?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24.1), // 24.1 hours ago
-        read: true
-      },
-      {
-        id: '506',
-        sender: 'agent',
-        content: 'Our onboarding process typically takes 2-3 weeks. We assign a dedicated account manager who will guide you through setup, training, and integration. Would you like to schedule a demo with one of our account managers?',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24.05), // 24.05 hours ago
-        read: true
-      },
-      {
-        id: '507',
-        sender: 'customer',
-        content: 'I\'ll think about it and get back to you.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 24 hours ago
-        read: true
-      }
-    ],
-    tags: ['enterprise', 'pricing-inquiry', 'follow-up'],
-    isStarred: false,
-    isHandedOff: false
-  }
-];
-
-// Mock leads data extracted from conversations
-const mockLeads = mockConversations.map(conv => ({
-  id: conv.id,
-  name: conv.customerName,
-  email: conv.customerEmail,
-  phone: conv.customerPhone,
-  company: conv.customerCompany,
-  source: conv.agentName,
-  status: conv.status === 'closed' ? 'converted' : conv.status === 'handedOff' ? 'qualified' : 'new',
-  createdAt: conv.messages[0]?.timestamp || new Date(),
-  lastContact: conv.lastMessageTime,
-  notes: `Lead generated from conversation with ${conv.agentName}`,
-  tags: conv.tags
-}));
-
 export function Conversations() {
-  const [conversations, setConversations] = useState(mockConversations);
-  const [leads, setLeads] = useState(mockLeads);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'closed' | 'handedOff'>('all');
@@ -388,8 +58,36 @@ export function Conversations() {
   });
   const [newMessage, setNewMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'conversations' | 'leads'>('conversations');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const [leadStatusFilter, setLeadStatusFilter] = useState<'all' | 'new' | 'qualified' | 'converted'>('all');
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch conversations and leads on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Fetch conversations
+        const conversationsResponse = await conversationsApi.getConversations();
+        setConversations(conversationsResponse.data);
+        
+        // Fetch leads
+        const leadsResponse = await conversationsApi.getLeads();
+        setLeads(leadsResponse.data);
+        
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load conversations and leads');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
 
   // Get the selected conversation object
   const currentConversation = conversations.find(conv => conv.id === selectedConversation);
@@ -424,22 +122,19 @@ export function Conversations() {
   });
 
   // Handle sending a new message
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return;
     
-    setIsLoading(true);
+    setIsSending(true);
     
-    // Simulate API call delay
-    setTimeout(() => {
+    try {
+      // Send message via API
+      const response = await conversationsApi.sendMessage(selectedConversation, newMessage, 'human-agent');
+      
+      // Update conversations state with new message
       const updatedConversations = conversations.map(conv => {
         if (conv.id === selectedConversation) {
-          const newMessageObj = {
-            id: `new-${Date.now()}`,
-            sender: 'human-agent',
-            content: newMessage,
-            timestamp: new Date(),
-            read: true
-          };
+          const newMessageObj = response.data.message;
           
           return {
             ...conv,
@@ -454,52 +149,63 @@ export function Conversations() {
       
       setConversations(updatedConversations);
       setNewMessage('');
-      setIsLoading(false);
-    }, 500);
+    } catch (err) {
+      console.error('Error sending message:', err);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   // Handle human handoff toggle
-  const handleHandoffToggle = (conversationId: string, handedOff: boolean) => {
-    const updatedConversations = conversations.map(conv => {
-      if (conv.id === conversationId) {
-        // If turning on handoff, add a system message
-        let updatedMessages = [...conv.messages];
-        
-        if (handedOff && !conv.isHandedOff) {
-          updatedMessages.push({
-            id: `system-${Date.now()}`,
-            sender: 'system',
-            content: 'This conversation has been handed off to a human agent.',
-            timestamp: new Date(),
-            read: true
-          });
-        }
-        
-        return {
-          ...conv,
-          isHandedOff: handedOff,
-          status: handedOff ? 'handedOff' : conv.status,
-          messages: updatedMessages
-        };
-      }
-      return conv;
-    });
-    
-    setConversations(updatedConversations);
-    
-    // Update leads status if conversation is handed off
-    if (handedOff) {
-      const updatedLeads = leads.map(lead => {
-        if (lead.id === conversationId) {
+  const handleHandoffToggle = async (conversationId: string, handedOff: boolean) => {
+    try {
+      // Toggle handoff via API
+      const response = await conversationsApi.toggleHandoff(conversationId, handedOff);
+      
+      // Update conversations state
+      const updatedConversations = conversations.map(conv => {
+        if (conv.id === conversationId) {
+          // If turning on handoff, add a system message
+          let updatedMessages = [...conv.messages];
+          
+          if (handedOff && !conv.isHandedOff) {
+            updatedMessages.push({
+              id: `system-${Date.now()}`,
+              sender: 'system',
+              content: 'This conversation has been handed off to a human agent.',
+              timestamp: new Date(),
+              read: true
+            });
+          }
+          
           return {
-            ...lead,
-            status: 'qualified'
+            ...conv,
+            isHandedOff: handedOff,
+            status: handedOff ? 'handedOff' : conv.status,
+            messages: updatedMessages
           };
         }
-        return lead;
+        return conv;
       });
       
-      setLeads(updatedLeads);
+      setConversations(updatedConversations);
+      
+      // Update leads status if conversation is handed off
+      if (handedOff) {
+        const updatedLeads = leads.map(lead => {
+          if (lead.id === conversationId) {
+            return {
+              ...lead,
+              status: 'qualified'
+            };
+          }
+          return lead;
+        });
+        
+        setLeads(updatedLeads);
+      }
+    } catch (err) {
+      console.error('Error toggling handoff:', err);
     }
   };
 
@@ -519,18 +225,26 @@ export function Conversations() {
   };
 
   // Handle updating lead status
-  const handleUpdateLeadStatus = (leadId: string, status: 'new' | 'qualified' | 'converted') => {
-    const updatedLeads = leads.map(lead => {
-      if (lead.id === leadId) {
-        return {
-          ...lead,
-          status
-        };
-      }
-      return lead;
-    });
-    
-    setLeads(updatedLeads);
+  const handleUpdateLeadStatus = async (leadId: string, status: 'new' | 'qualified' | 'converted') => {
+    try {
+      // Update lead status via API
+      const response = await conversationsApi.updateLeadStatus(leadId, status);
+      
+      // Update leads state
+      const updatedLeads = leads.map(lead => {
+        if (lead.id === leadId) {
+          return {
+            ...lead,
+            status
+          };
+        }
+        return lead;
+      });
+      
+      setLeads(updatedLeads);
+    } catch (err) {
+      console.error('Error updating lead status:', err);
+    }
   };
 
   // Render message sender avatar
@@ -539,7 +253,7 @@ export function Conversations() {
       return (
         <Avatar className="h-8 w-8">
           <AvatarFallback>
-            {conversation.customerName.split(' ').map(n => n[0]).join('')}
+            {conversation.customerName.split(' ').map((n: string) => n[0]).join('')}
           </AvatarFallback>
         </Avatar>
       );
@@ -600,6 +314,34 @@ export function Conversations() {
         return null;
     }
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
+        <p className="text-lg font-medium">Loading conversations and leads...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
+        <div className="mb-4 rounded-full bg-destructive/10 p-3">
+          <AlertTriangle className="h-10 w-10 text-destructive" />
+        </div>
+        <h2 className="mb-2 text-xl font-bold">Something went wrong</h2>
+        <p className="mb-4 text-center text-muted-foreground">
+          {error}
+        </p>
+        <Button onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -706,7 +448,7 @@ export function Conversations() {
                           <div className="flex items-start gap-3">
                             <Avatar className="h-10 w-10">
                               <AvatarFallback>
-                                {conversation.customerName.split(' ').map(n => n[0]).join('')}
+                                {conversation.customerName.split(' ').map((n: string) => n[0]).join('')}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -751,7 +493,7 @@ export function Conversations() {
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
                           <AvatarFallback>
-                            {currentConversation.customerName.split(' ').map(n => n[0]).join('')}
+                            {currentConversation.customerName.split(' ').map((n: string) => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -804,7 +546,7 @@ export function Conversations() {
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <div className="flex flex-wrap gap-1">
-                        {currentConversation.tags.map((tag, index) => (
+                        {currentConversation.tags.map((tag: string, index: number) => (
                           <Badge key={index} variant="outline" className="text-xs">
                             {tag}
                           </Badge>
@@ -822,7 +564,7 @@ export function Conversations() {
                   <div className="flex h-[400px] flex-col">
                     <ScrollArea className="flex-1 p-4">
                       <div className="space-y-4">
-                        {currentConversation.messages.map((message) => (
+                        {currentConversation.messages.map((message: any) => (
                           <div key={message.id} className="flex gap-3">
                             {renderMessageAvatar(message, currentConversation)}
                             <div className={cn(
@@ -870,9 +612,9 @@ export function Conversations() {
                         <Button 
                           className="h-auto" 
                           onClick={handleSendMessage}
-                          disabled={!newMessage.trim() || isLoading}
+                          disabled={!newMessage.trim() || isSending}
                         >
-                          {isLoading ? (
+                          {isSending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <Send className="h-4 w-4" />
@@ -998,7 +740,7 @@ export function Conversations() {
                         <div className="col-span-3 flex items-center gap-3">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback>
-                              {lead.name.split(' ').map(n => n[0]).join('')}
+                              {lead.name.split(' ').map((n: string) => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
                           <div>

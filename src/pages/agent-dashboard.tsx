@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { fetchAgentById } from '@/store/slices/agents-slice';
+import { agentDashboardApi } from '@/api/agent-dashboard-api';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,10 @@ import {
 export function AgentDashboard() {
   const { id } = useParams<{ id: string }>();
   const dispatch = useAppDispatch();
-  const { selectedAgent, isLoading, error } = useAppSelector((state) => state.agents);
+  const { selectedAgent, isLoading: agentLoading, error: agentError } = useAppSelector((state) => state.agents);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState('');
   const [conversation, setConversation] = useState<Array<{role: 'user' | 'agent', content: string}>>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -63,66 +67,25 @@ export function AgentDashboard() {
     }
   }, [dispatch, id]);
 
-  // Simulated data for the dashboard
-  const performanceMetrics = [
-    { 
-      title: 'Queries Resolved', 
-      value: 256, 
-      change: 12, 
-      trend: 'up',
-      icon: <MessageSquare className="h-5 w-5" /> 
-    },
-    { 
-      title: 'Avg. Response Time', 
-      value: '1.2s', 
-      change: -8, 
-      trend: 'down',
-      icon: <Clock className="h-5 w-5" /> 
-    },
-    { 
-      title: 'Satisfaction Rate', 
-      value: '92%', 
-      change: 5, 
-      trend: 'up',
-      icon: <ThumbsUp className="h-5 w-5" /> 
-    },
-    { 
-      title: 'Flagged Responses', 
-      value: 3, 
-      change: -2, 
-      trend: 'down',
-      icon: <AlertTriangle className="h-5 w-5" /> 
-    },
-  ];
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!id) return;
+      
+      try {
+        setIsLoading(true);
+        const response = await agentDashboardApi.getAgentDashboardData(id);
+        setDashboardData(response.data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to load agent dashboard data');
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const topQueries = [
-    { query: 'How do I reset my password?', frequency: 42 },
-    { query: 'What are your business hours?', frequency: 38 },
-    { query: 'Do you offer free shipping?', frequency: 27 },
-    { query: 'How can I track my order?', frequency: 24 },
-    { query: 'What is your return policy?', frequency: 19 },
-  ];
-
-  const flaggedPhrases = [
-    { phrase: 'I don\'t know', count: 5 },
-    { phrase: 'I can\'t help with that', count: 3 },
-    { phrase: 'That\'s not possible', count: 2 },
-  ];
-
-  const knowledgeDocuments = [
-    { id: 'doc1', name: 'Product Catalog.pdf', status: 'processed', size: '2.4 MB', date: '2025-03-15T10:30:00Z' },
-    { id: 'doc2', name: 'FAQ.docx', status: 'processed', size: '1.1 MB', date: '2025-03-14T14:45:00Z' },
-    { id: 'doc3', name: 'Return Policy.pdf', status: 'processing', size: '0.8 MB', date: '2025-03-16T09:15:00Z' },
-    { id: 'doc4', name: 'Shipping Information.txt', status: 'error', size: '0.3 MB', date: '2025-03-16T11:20:00Z' },
-    { id: 'doc5', name: 'Customer Support Guidelines.pdf', status: 'processed', size: '1.7 MB', date: '2025-03-13T16:30:00Z' },
-  ];
-
-  const integrations = [
-    { id: 'whatsapp', name: 'WhatsApp', status: 'connected', enabled: true, icon: <Smartphone className="h-5 w-5" /> },
-    { id: 'email', name: 'Email', status: 'connected', enabled: true, icon: <Mail className="h-5 w-5" /> },
-    { id: 'calendar', name: 'Calendar', status: 'disconnected', enabled: false, icon: <Calendar className="h-5 w-5" /> },
-    { id: 'payment', name: 'Payment Gateway', status: 'error', enabled: false, icon: <CreditCard className="h-5 w-5" /> },
-  ];
+    fetchDashboardData();
+  }, [id]);
 
   const handleSendMessage = () => {
     if (!testMessage.trim()) return;
@@ -185,12 +148,12 @@ export function AgentDashboard() {
     }
   };
 
-  const filteredDocuments = knowledgeDocuments.filter(doc => 
+  const filteredDocuments = dashboardData?.knowledgeDocuments.filter((doc: any) => 
     doc.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ) || [];
 
   // Loading state
-  if (isLoading) {
+  if ((isLoading && !dashboardData) || (agentLoading && !selectedAgent)) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
@@ -200,7 +163,7 @@ export function AgentDashboard() {
   }
 
   // Error state
-  if (error || !selectedAgent) {
+  if ((error || agentError) && !selectedAgent) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="mb-4 rounded-full bg-destructive/10 p-3">
@@ -233,11 +196,11 @@ export function AgentDashboard() {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <h1 className="text-2xl font-bold">{selectedAgent.name}</h1>
+            <h1 className="text-2xl font-bold">{selectedAgent?.name}</h1>
             <Badge className="bg-green-500">Active</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            Last updated {formatDate(selectedAgent.updatedAt)}
+            Last updated {formatDate(selectedAgent?.updatedAt || '')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -253,23 +216,23 @@ export function AgentDashboard() {
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
             <Avatar className="h-16 w-16 border-2 border-primary/10">
-              <AvatarImage src={selectedAgent.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedAgent.name}`} alt={selectedAgent.name} />
+              <AvatarImage src={selectedAgent?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedAgent?.name}`} alt={selectedAgent?.name} />
               <AvatarFallback>
                 <Bot className="h-8 w-8" />
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-1">
-              <h2 className="text-xl font-bold">{selectedAgent.name}</h2>
-              <p className="text-sm text-muted-foreground">{selectedAgent.description}</p>
+              <h2 className="text-xl font-bold">{selectedAgent?.name}</h2>
+              <p className="text-sm text-muted-foreground">{selectedAgent?.description}</p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Badge variant="outline" className="bg-primary/5">
-                  {selectedAgent.model}
+                  {selectedAgent?.model}
                 </Badge>
                 <Badge variant="outline" className="bg-primary/5">
-                  Temperature: {selectedAgent.temperature}
+                  Temperature: {selectedAgent?.temperature}
                 </Badge>
                 <Badge variant="outline" className="bg-primary/5">
-                  Max Tokens: {selectedAgent.maxTokens}
+                  Max Tokens: {selectedAgent?.maxTokens}
                 </Badge>
               </div>
             </div>
@@ -291,16 +254,21 @@ export function AgentDashboard() {
         <TabsContent value="overview" className="mt-6 space-y-6">
           {/* Performance Metrics */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {performanceMetrics.map((metric, index) => (
+            {dashboardData?.performanceMetrics.map((metric: any, index: number) => (
               <Card key={index} className="overflow-hidden">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium">{metric.title}</CardTitle>
                     <div className={cn(
                       "rounded-full p-1.5",
-                      metric.trend === 'up' ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
+                      metric.trend === 'up' && metric.title !== 'Avg. Response Time' && metric.title !== 'Flagged Responses' ? "bg-green-500/10 text-green-500" : 
+                      metric.trend === 'down' && (metric.title === 'Avg. Response Time' || metric.title === 'Flagged Responses') ? "bg-green-500/10 text-green-500" :
+                      "bg-red-500/10 text-red-500"
                     )}>
-                      {metric.icon}
+                      {index === 0 ? <MessageSquare className="h-5 w-5" /> :
+                       index === 1 ? <Clock className="h-5 w-5" /> :
+                       index === 2 ? <ThumbsUp className="h-5 w-5" /> :
+                       <AlertTriangle className="h-5 w-5" />}
                     </div>
                   </div>
                 </CardHeader>
@@ -309,16 +277,24 @@ export function AgentDashboard() {
                   <div className="flex items-center gap-1 text-xs">
                     <span className={cn(
                       "font-medium",
-                      metric.trend === 'up' 
-                        ? metric.title === 'Flagged Responses' ? "text-red-500" : "text-green-500"
-                        : metric.title === 'Flagged Responses' ? "text-green-500" : "text-red-500"
+                      (metric.trend === 'up' && metric.title !== 'Avg. Response Time' && metric.title !== 'Flagged Responses') || 
+                      (metric.trend === 'down' && (metric.title === 'Avg. Response Time' || metric.title === 'Flagged Responses'))
+                        ? "text-green-500" 
+                        : "text-red-500"
                     )}>
                       {metric.change > 0 ? '+' : ''}{metric.change}%
                     </span>
-                    <span className="text-muted-foreground">vs. last week</span>
+                    <span className="text-muted-foreground">vs. previous period</span>
                   </div>
                   <div className="mt-2">
-                    <Progress value={65} className="h-1" />
+                    <Progress 
+                      value={
+                        metric.title === 'Satisfaction Rate'
+                          ? parseInt(metric.value.toString().replace('%', ''))
+                          : 65
+                      } 
+                      className="h-1" 
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -395,7 +371,7 @@ export function AgentDashboard() {
                       <div>Phrase</div>
                       <div className="text-right">Occurrences</div>
                     </div>
-                    {flaggedPhrases.map((item, i) => (
+                    {dashboardData?.flaggedPhrases.map((item: any, i: number) => (
                       <div key={i} className="grid grid-cols-2 px-3 py-2 text-sm">
                         <div className="font-medium">{item.phrase}</div>
                         <div className="text-right text-muted-foreground">{item.count}</div>
@@ -420,7 +396,7 @@ export function AgentDashboard() {
                     <div className="col-span-4">Query</div>
                     <div className="text-right">Count</div>
                   </div>
-                  {topQueries.map((item, i) => (
+                  {dashboardData?.topQueries.map((item: any, i: number) => (
                     <div key={i} className="grid grid-cols-5 border-b px-3 py-2 text-sm last:border-0">
                       <div className="col-span-4 font-medium">{item.query}</div>
                       <div className="text-right text-muted-foreground">{item.frequency}</div>
@@ -470,7 +446,7 @@ export function AgentDashboard() {
                       >
                         {message.role === 'agent' && (
                           <Avatar className="mt-0.5 h-8 w-8 flex-shrink-0">
-                            <AvatarImage src={selectedAgent.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedAgent.name}`} alt="Avatar" />
+                            <AvatarImage src={selectedAgent?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedAgent?.name}`} alt="Avatar" />
                             <AvatarFallback>AI</AvatarFallback>
                           </Avatar>
                         )}
@@ -478,7 +454,7 @@ export function AgentDashboard() {
                         <div className={cn(
                           "max-w-[80%] rounded-lg px-3 py-2",
                           message.role === 'user' 
-                            ? "bg-primary text-primary-foreground" 
+                            ? "bg-primary text-primary-fore ground" 
                             : "bg-muted"
                         )}>
                           <p className="text-sm">{message.content}</p>
@@ -497,7 +473,7 @@ export function AgentDashboard() {
                     {isTyping && (
                       <div className="flex gap-2">
                         <Avatar className="mt-0.5 h-8 w-8 flex-shrink-0">
-                          <AvatarImage src={selectedAgent.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedAgent.name}`} alt="Avatar" />
+                          <AvatarImage src={selectedAgent?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedAgent?.name}`} alt="Avatar" />
                           <AvatarFallback>AI</AvatarFallback>
                         </Avatar>
                         <div className="max-w-[80%] rounded-lg bg-muted px-4 py-3">
@@ -714,7 +690,7 @@ export function AgentDashboard() {
                       No documents found
                     </div>
                   ) : (
-                    filteredDocuments.map((doc) => (
+                    filteredDocuments.map((doc: any) => (
                       <div key={doc.id} className="grid grid-cols-12 border-b px-4 py-3 text-sm last:border-0">
                         <div className="col-span-5 flex items-center gap-2">
                           <FileText className="h-4 w-4 text-muted-foreground" />
@@ -755,7 +731,7 @@ export function AgentDashboard() {
                   <CardContent>
                     <Textarea 
                       className="min-h-[100px]"
-                      defaultValue={`Hello! I'm ${selectedAgent.name}, your AI assistant. How can I help you today?`}
+                      defaultValue={`Hello! I'm ${selectedAgent?.name}, your AI assistant. How can I help you today?`}
                     />
                   </CardContent>
                   <CardFooter className="flex justify-end gap-2">
@@ -804,17 +780,17 @@ export function AgentDashboard() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Agent Name</Label>
-                    <Input id="name" defaultValue={selectedAgent.name} />
+                    <Input id="name" defaultValue={selectedAgent?.name} />
                   </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
-                    <Textarea id="description" defaultValue={selectedAgent.description} />
+                    <Textarea id="description" defaultValue={selectedAgent?.description} />
                   </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="model">Model</Label>
-                    <Input id="model" defaultValue={selectedAgent.model} />
+                    <Input id="model" defaultValue={selectedAgent?.model} />
                   </div>
                 </div>
                 
@@ -822,14 +798,14 @@ export function AgentDashboard() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="temperature">Temperature</Label>
-                      <span className="text-sm font-medium">{selectedAgent.temperature}</span>
+                      <span className="text-sm font-medium">{selectedAgent?.temperature}</span>
                     </div>
                     <Slider
                       id="temperature"
                       min={0}
                       max={1}
                       step={0.1}
-                      defaultValue={[selectedAgent.temperature]}
+                      defaultValue={[selectedAgent?.temperature || 0.7]}
                     />
                     <p className="text-xs text-muted-foreground">
                       Controls randomness: Lower values are more deterministic, higher values more creative
@@ -839,14 +815,14 @@ export function AgentDashboard() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="maxTokens">Max Tokens</Label>
-                      <span className="text-sm font-medium">{selectedAgent.maxTokens}</span>
+                      <span className="text-sm font-medium">{selectedAgent?.maxTokens}</span>
                     </div>
                     <Slider
                       id="maxTokens"
                       min={100}
                       max={2000}
                       step={100}
-                      defaultValue={[selectedAgent.maxTokens]}
+                      defaultValue={[selectedAgent?.maxTokens || 1000]}
                     />
                     <p className="text-xs text-muted-foreground">
                       Maximum length of generated responses
@@ -858,7 +834,7 @@ export function AgentDashboard() {
                     <Textarea 
                       id="systemPrompt" 
                       className="min-h-[150px]"
-                      defaultValue={selectedAgent.systemPrompt}
+                      defaultValue={selectedAgent?.systemPrompt}
                     />
                   </div>
                 </div>
@@ -920,7 +896,7 @@ export function AgentDashboard() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
-                {integrations.map((integration) => (
+                {dashboardData?.integrations.map((integration: any) => (
                   <Card key={integration.id} className="overflow-hidden">
                     <CardContent className="p-0">
                       <div className="flex items-center justify-between border-b p-4">
@@ -929,7 +905,10 @@ export function AgentDashboard() {
                             "rounded-md p-2",
                             integration.enabled ? "bg-primary/10" : "bg-muted"
                           )}>
-                            {integration.icon}
+                            {integration.id === 'whatsapp' ? <Smartphone className="h-5 w-5" /> :
+                             integration.id === 'email' ? <Mail className="h-5 w-5" /> :
+                             integration.id === 'calendar' ? <Calendar className="h-5 w-5" /> :
+                             <CreditCard className="h-5 w-5" />}
                           </div>
                           <div>
                             <h3 className="font-medium">{integration.name}</h3>
@@ -976,17 +955,6 @@ export function AgentDashboard() {
                     </CardContent>
                   </Card>
                 ))}
-              </div>
-              
-              <div className="rounded-md border border-dashed p-6">
-                <div className="flex flex-col items-center justify-center text-center">
-                  <Plus className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <h3 className="text-lg font-medium">Add More Integrations</h3>
-                  <p className="mb-4 max-w-md text-sm text-muted-foreground">
-                    Connect your agent with additional services and platforms to expand its capabilities
-                  </p>
-                  <Button>Browse Integration Marketplace</Button>
-                </div>
               </div>
             </CardContent>
           </Card>

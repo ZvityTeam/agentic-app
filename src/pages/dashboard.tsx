@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { fetchAgents } from '@/store/slices/agents-slice';
+import { dashboardApi } from '@/api/dashboard-api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,14 +40,36 @@ import { Link } from 'react-router-dom';
 export function Dashboard() {
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const { agents, isLoading, error } = useAppSelector((state) => state.agents);
+  const { agents, isLoading: agentsLoading, error: agentsError } = useAppSelector((state) => state.agents);
   const [analyticsOpen, setAnalyticsOpen] = useState(true);
   const [greeting, setGreeting] = useState('');
   const [timeMessage, setTimeMessage] = useState('');
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('week');
 
   useEffect(() => {
     dispatch(fetchAgents());
   }, [dispatch]);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoading(true);
+        const response = await dashboardApi.getDashboardData();
+        setDashboardData(response.data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to load dashboard data');
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -62,55 +85,8 @@ export function Dashboard() {
     }
   }, []);
 
-  // Simulated data for charts and analytics
-  const quickStats = [
-    { 
-      title: 'Active Agents', 
-      value: agents.length || 0, 
-      change: 12, 
-      icon: <Bot className="h-4 w-4" /> 
-    },
-    { 
-      title: 'Total Conversations', 
-      value: 128, 
-      change: -5, 
-      icon: <MessageSquare className="h-4 w-4" /> 
-    },
-    { 
-      title: 'User Engagement', 
-      value: '87%', 
-      change: 23, 
-      icon: <Users className="h-4 w-4" /> 
-    },
-    { 
-      title: 'Response Time', 
-      value: '1.2s', 
-      change: 15, 
-      icon: <Clock className="h-4 w-4" /> 
-    },
-  ];
-
-  const renderAgentStatus = (status) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-500">Active</Badge>;
-      case 'training':
-        return <Badge className="bg-amber-500">Training</Badge>;
-      case 'offline':
-        return <Badge variant="outline">Offline</Badge>;
-      default:
-        return <Badge variant="secondary">Draft</Badge>;
-    }
-  };
-
-  // Simulated agent statuses
-  const getAgentStatus = (index) => {
-    const statuses = ['active', 'training', 'offline', 'draft'];
-    return statuses[index % statuses.length];
-  };
-
   // Loading state
-  if (isLoading) {
+  if ((isLoading && !dashboardData) || (agentsLoading && agents.length === 0)) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
@@ -120,7 +96,7 @@ export function Dashboard() {
   }
 
   // Error state
-  if (error) {
+  if ((error || agentsError) && agents.length === 0) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="mb-4 rounded-full bg-destructive/10 p-3">
@@ -130,12 +106,30 @@ export function Dashboard() {
         <p className="mb-4 text-center text-muted-foreground">
           We couldn't load your dashboard data. Please try again.
         </p>
-        <Button onClick={() => dispatch(fetchAgents())}>
+        <Button onClick={() => window.location.reload()}>
           Retry
         </Button>
       </div>
     );
   }
+
+  // Get the appropriate analytics data based on selected timeframe
+  const getAnalyticsData = () => {
+    if (!dashboardData) return null;
+    
+    switch (selectedTimeframe) {
+      case 'day':
+        return dashboardData.analyticsData.day;
+      case 'week':
+        return dashboardData.analyticsData.week;
+      case 'month':
+        return dashboardData.analyticsData.month;
+      default:
+        return dashboardData.analyticsData.week;
+    }
+  };
+
+  const analyticsData = getAnalyticsData();
 
   return (
     <div className="space-y-8">
@@ -149,7 +143,7 @@ export function Dashboard() {
             <p className="mt-1 text-muted-foreground">{timeMessage}</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            {quickStats.map((stat, i) => (
+            {dashboardData?.quickStats.map((stat, i) => (
               <Card key={i} className="flex w-full flex-1 min-w-[140px] border shadow-sm md:min-w-[160px]">
                 <CardContent className="flex flex-row items-center justify-between p-4">
                   <div className="space-y-1">
@@ -169,7 +163,10 @@ export function Dashboard() {
                       {Math.abs(stat.change)}%
                     </div>
                     <div className="rounded-full bg-primary/10 p-1.5">
-                      {stat.icon}
+                      {i === 0 ? <Bot className="h-4 w-4" /> : 
+                       i === 1 ? <MessageSquare className="h-4 w-4" /> :
+                       i === 2 ? <Users className="h-4 w-4" /> :
+                       <Clock className="h-4 w-4" />}
                     </div>
                   </div>
                 </CardContent>
@@ -202,7 +199,7 @@ export function Dashboard() {
         </div>
         <CollapsibleContent>
           <div className="space-y-4 px-6 pb-6">
-            <Tabs defaultValue="week" className="w-full">
+            <Tabs defaultValue={selectedTimeframe} onValueChange={setSelectedTimeframe} className="w-full">
               <div className="flex items-center justify-between">
                 <TabsList>
                   <TabsTrigger value="day">Day</TabsTrigger>
@@ -214,164 +211,192 @@ export function Dashboard() {
                 </Button>
               </div>
               
-              <TabsContent value="day" className="mt-4 space-y-4">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Conversations</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">24</div>
-                      <p className="text-xs text-muted-foreground">+12% from yesterday</p>
-                      <div className="mt-2">
-                        <Progress value={65} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">User Satisfaction</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">92%</div>
-                      <p className="text-xs text-muted-foreground">+5% from yesterday</p>
-                      <div className="mt-2">
-                        <Progress value={92} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">98%</div>
-                      <p className="text-xs text-muted-foreground">+2% from yesterday</p>
-                      <div className="mt-2">
-                        <Progress value={98} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Avg. Response Time</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">1.2s</div>
-                      <p className="text-xs text-muted-foreground">-0.3s from yesterday</p>
-                      <div className="mt-2">
-                        <Progress value={85} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="week" className="mt-4 space-y-4">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Conversations</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">128</div>
-                      <p className="text-xs text-muted-foreground">+18% from last week</p>
-                      <div className="mt-2">
-                        <Progress value={72} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">User Satisfaction</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">87%</div>
-                      <p className="text-xs text-muted-foreground">+3% from last week</p>
-                      <div className="mt-2">
-                        <Progress value={87} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">95%</div>
-                      <p className="text-xs text-muted-foreground">+1% from last week</p>
-                      <div className="mt-2">
-                        <Progress value={95} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Avg. Response Time</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">1.5s</div>
-                      <p className="text-xs text-muted-foreground">-0.2s from last week</p>
-                      <div className="mt-2">
-                        <Progress value={80} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="month" className="mt-4 space-y-4">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Conversations</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">512</div>
-                      <p className="text-xs text-muted-foreground">+32% from last month</p>
-                      <div className="mt-2">
-                        <Progress value={78} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">User Satisfaction</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">85%</div>
-                      <p className="text-xs text-muted-foreground">+7% from last month</p>
-                      <div className="mt-2">
-                        <Progress value={85} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">93%</div>
-                      <p className="text-xs text-muted-foreground">+4% from last month</p>
-                      <div className="mt-2">
-                        <Progress value={93} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Avg. Response Time</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">1.8s</div>
-                      <p className="text-xs text-muted-foreground">-0.5s from last month</p>
-                      <div className="mt-2">
-                        <Progress value={75} className="h-1" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
+              {analyticsData && (
+                <>
+                  <TabsContent value="day" className="mt-4 space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Conversations</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.conversations}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.conversations > 0 ? '+' : ''}{analyticsData.change.conversations}% from yesterday
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={65} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">User Satisfaction</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.satisfaction}%</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.satisfaction > 0 ? '+' : ''}{analyticsData.change.satisfaction}% from yesterday
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={analyticsData.satisfaction} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.responseRate}%</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.responseRate > 0 ? '+' : ''}{analyticsData.change.responseRate}% from yesterday
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={analyticsData.responseRate} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Avg. Response Time</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.responseTime}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.responseTime < 0 ? '' : '+'}{analyticsData.change.responseTime}s from yesterday
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={85} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="week" className="mt-4 space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Conversations</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.conversations}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.conversations > 0 ? '+' : ''}{analyticsData.change.conversations}% from last week
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={72} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">User Satisfaction</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.satisfaction}%</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.satisfaction > 0 ? '+' : ''}{analyticsData.change.satisfaction}% from last week
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={analyticsData.satisfaction} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.responseRate}%</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.responseRate > 0 ? '+' : ''}{analyticsData.change.responseRate}% from last week
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={analyticsData.responseRate} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Avg. Response Time</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.responseTime}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.responseTime < 0 ? '' : '+'}{analyticsData.change.responseTime}s from last week
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={80} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="month" className="mt-4 space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Conversations</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.conversations}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.conversations > 0 ? '+' : ''}{analyticsData.change.conversations}% from last month
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={78} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">User Satisfaction</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.satisfaction}%</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.satisfaction > 0 ? '+' : ''}{analyticsData.change.satisfaction}% from last month
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={analyticsData.satisfaction} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.responseRate}%</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.responseRate > 0 ? '+' : ''}{analyticsData.change.responseRate}% from last month
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={analyticsData.responseRate} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Avg. Response Time</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{analyticsData.responseTime}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {analyticsData.change.responseTime < 0 ? '' : '+'}{analyticsData.change.responseTime}s from last month
+                          </p>
+                          <div className="mt-2">
+                            <Progress value={75} className="h-1" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+                </>
+              )}
             </Tabs>
           </div>
         </CollapsibleContent>
@@ -417,22 +442,30 @@ export function Dashboard() {
 
         {/* Agent cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Simulated agents if none exist */}
-          {(agents.length > 0 ? agents : Array(3).fill(null)).map((agent, index) => (
+          {agents.map((agent) => (
             <Card 
-              key={agent?.id || index} 
+              key={agent.id} 
               className="group overflow-hidden transition-all duration-200 hover:shadow-md"
             >
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <CardTitle>{agent?.name || `Sample Agent ${index + 1}`}</CardTitle>
+                    <CardTitle>{agent.name}</CardTitle>
                     <CardDescription className="line-clamp-1">
-                      {agent?.description || "An AI assistant designed to help with specific tasks"}
+                      {agent.description}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    {renderAgentStatus(getAgentStatus(index))}
+                    {agent.status && (
+                      <Badge className={
+                        agent.status === 'active' ? "bg-green-500" :
+                        agent.status === 'training' ? "bg-amber-500" :
+                        agent.status === 'offline' ? "border border-muted-foreground/30 bg-transparent text-muted-foreground" :
+                        "bg-secondary text-secondary-foreground"
+                      }>
+                        {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
+                      </Badge>
+                    )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -459,19 +492,21 @@ export function Dashboard() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Conversations</p>
-                      <p className="text-lg font-semibold">{Math.floor(Math.random() * 100)}</p>
+                      <p className="text-lg font-semibold">{agent.stats?.conversations || 0}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Satisfaction</p>
-                      <p className="text-lg font-semibold">{Math.floor(80 + Math.random() * 20)}%</p>
+                      <p className="text-lg font-semibold">{agent.stats?.satisfaction || 'N/A'}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Response Time</p>
-                      <p className="text-lg font-semibold">{(1 + Math.random() * 2).toFixed(1)}s</p>
+                      <p className="text-lg font-semibold">{agent.stats?.responseTime || 'N/A'}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Last Active</p>
-                      <p className="text-lg font-semibold">{formatRelativeTime(new Date(Date.now() - Math.random() * 86400000 * 5))}</p>
+                      <p className="text-lg font-semibold">
+                        {agent.stats?.lastActive ? formatRelativeTime(agent.stats.lastActive) : 'N/A'}
+                      </p>
                     </div>
                   </div>
                   
@@ -479,17 +514,17 @@ export function Dashboard() {
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-muted-foreground">Usage</span>
                       <span className="font-medium">
-                        {Math.floor(Math.random() * 100)}%
+                        {agent.stats?.usage || 0}%
                       </span>
                     </div>
-                    <Progress value={Math.floor(Math.random() * 100)} className="h-1" />
+                    <Progress value={agent.stats?.usage || 0} className="h-1" />
                   </div>
                 </div>
               </CardContent>
               <CardFooter className="border-t bg-muted/50 px-6 py-3">
                 <div className="flex w-full items-center justify-between">
                   <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
-                    <Link to={`/agents/${agent?.id || index + 1}`}>View Details</Link>
+                    <Link to={`/agents/${agent.id}`}>View Details</Link>
                   </Button>
                   <Button size="sm" className="h-8 px-2 text-xs">
                     <Zap className="mr-1 h-3 w-3" />

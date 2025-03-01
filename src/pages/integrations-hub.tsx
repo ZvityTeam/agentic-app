@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { integrationsApi } from '@/api/integrations-api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,36 +47,15 @@ import {
   Loader2
 } from 'lucide-react';
 
-// Integration category types
-type IntegrationCategory = 'all' | 'communication' | 'calendar' | 'crm' | 'payments';
-
-// Integration status types
-type IntegrationStatus = 'connected' | 'disconnected' | 'pending' | 'error';
-
-// Integration interface
-interface Integration {
-  id: string;
-  name: string;
-  description: string;
-  category: IntegrationCategory | IntegrationCategory[];
-  icon: React.ReactNode;
-  status: IntegrationStatus;
-  featured?: boolean;
-  stats?: {
-    title: string;
-    value: string;
-    change?: number;
-  }[];
-}
-
 export function IntegrationsHub() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<IntegrationCategory>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [selectedIntegration, setSelectedIntegration] = useState<any | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [betaEnabled, setBetaEnabled] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [apiKey, setApiKey] = useState('sk_test_51NzUBXXXXXXXXXXXXXXXXXXX');
   const [webhookUrl, setWebhookUrl] = useState('https://example.com/webhook');
   const [events, setEvents] = useState({
@@ -85,131 +65,27 @@ export function IntegrationsHub() {
     'conversation.ended': false,
     'user.created': true,
   });
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock integrations data
-  const integrations: Integration[] = [
-    {
-      id: 'whatsapp',
-      name: 'WhatsApp',
-      description: 'Connect your WhatsApp Business account to engage with customers directly.',
-      category: 'communication',
-      icon: <Smartphone className="h-6 w-6" />,
-      status: 'connected',
-      featured: true,
-      stats: [
-        { title: 'Active Conversations', value: '128', change: 12 },
-        { title: 'Messages Sent', value: '1,432', change: 8 },
-        { title: 'Response Rate', value: '94%', change: 3 },
-      ]
-    },
-    {
-      id: 'email',
-      name: 'Email Integration',
-      description: 'Send automated emails and notifications through your email provider.',
-      category: 'communication',
-      icon: <Mail className="h-6 w-6" />,
-      status: 'connected',
-      featured: true,
-      stats: [
-        { title: 'Emails Sent', value: '856', change: 5 },
-        { title: 'Open Rate', value: '42%', change: -2 },
-        { title: 'Click Rate', value: '18%', change: 4 },
-      ]
-    },
-    {
-      id: 'google-calendar',
-      name: 'Google Calendar',
-      description: 'Schedule appointments and meetings directly from conversations.',
-      category: 'calendar',
-      icon: <Calendar className="h-6 w-6" />,
-      status: 'connected',
-      featured: true,
-      stats: [
-        { title: 'Appointments', value: '42', change: 15 },
-        { title: 'Booking Rate', value: '68%', change: 7 },
-        { title: 'No-shows', value: '5%', change: -3 },
-      ]
-    },
-    {
-      id: 'stripe',
-      name: 'Stripe Payments',
-      description: 'Process payments and subscriptions securely within conversations.',
-      category: 'payments',
-      icon: <CreditCard className="h-6 w-6" />,
-      status: 'connected',
-      featured: true,
-      stats: [
-        { title: 'Transactions', value: '86', change: 23 },
-        { title: 'Revenue', value: '$4,280', change: 18 },
-        { title: 'Avg. Order', value: '$49.76', change: -2 },
-      ]
-    },
-    {
-      id: 'salesforce',
-      name: 'Salesforce',
-      description: 'Sync customer data and conversations with your Salesforce CRM.',
-      category: 'crm',
-      icon: <Briefcase className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-    {
-      id: 'hubspot',
-      name: 'HubSpot',
-      description: 'Connect your HubSpot CRM to track leads and customer interactions.',
-      category: 'crm',
-      icon: <Users className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-    {
-      id: 'slack',
-      name: 'Slack',
-      description: 'Get notifications and manage conversations through Slack channels.',
-      category: 'communication',
-      icon: <MessageSquare className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-    {
-      id: 'shopify',
-      name: 'Shopify',
-      description: 'Integrate with your Shopify store to handle orders and product inquiries.',
-      category: 'payments',
-      icon: <ShoppingCart className="h-6 w-6" />,
-      status: 'error',
-    },
-    {
-      id: 'zendesk',
-      name: 'Zendesk',
-      description: 'Create and manage support tickets from AI conversations.',
-      category: 'crm',
-      icon: <Headphones className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-    {
-      id: 'microsoft-calendar',
-      name: 'Microsoft Calendar',
-      description: 'Schedule meetings and appointments with Microsoft Calendar.',
-      category: 'calendar',
-      icon: <Calendar className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-    {
-      id: 'paypal',
-      name: 'PayPal',
-      description: 'Process payments through PayPal directly in conversations.',
-      category: 'payments',
-      icon: <CreditCard className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-    {
-      id: 'telegram',
-      name: 'Telegram',
-      description: 'Connect your Telegram bot to engage with users on the platform.',
-      category: 'communication',
-      icon: <MessageSquare className="h-6 w-6" />,
-      status: 'disconnected',
-    },
-  ];
+  useEffect(() => {
+    const fetchIntegrations = async () => {
+      try {
+        setIsLoading(true);
+        const response = await integrationsApi.getIntegrations();
+        setIntegrations(response.data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to load integrations');
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
+    fetchIntegrations();
+  }, []);
+console.log("integrations",integrations)
   // Filter integrations based on search query and selected category
   const filteredIntegrations = integrations.filter(integration => {
     const matchesSearch = integration.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -227,20 +103,20 @@ export function IntegrationsHub() {
   const featuredIntegrations = integrations.filter(integration => integration.featured);
 
   // Handle integration selection
-  const handleSelectIntegration = (integration: Integration) => {
+  const handleSelectIntegration = (integration: any) => {
     setSelectedIntegration(integration);
     setConfigOpen(true);
   };
 
   // Handle connect/configure button click
-  const handleConnectClick = (integration: Integration, e: React.MouseEvent) => {
+  const handleConnectClick = (integration: any, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedIntegration(integration);
     setConfigOpen(true);
   };
 
   // Render status badge
-  const renderStatusBadge = (status: IntegrationStatus) => {
+  const renderStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
         return <Badge className="bg-green-500">Connected</Badge>;
@@ -259,17 +135,65 @@ export function IntegrationsHub() {
   const handleConnect = () => {
     if (!selectedIntegration) return;
     
-    setIsLoading(true);
+    setIsConnecting(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      // Close the configuration panel
-      setConfigOpen(false);
-      // Reset selected integration
-      setSelectedIntegration(null);
-    }, 2000);
+    // Call the API to connect the integration
+    integrationsApi.connectIntegration(selectedIntegration.id, {
+      apiKey: apiKey,
+      webhookUrl: webhookUrl,
+      events: Object.keys(events).filter(key => events[key as keyof typeof events])
+    })
+      .then(() => {
+        // Update the integration status in the local state
+        const updatedIntegrations = integrations.map(integration => {
+          if (integration.id === selectedIntegration.id) {
+            return {
+              ...integration,
+              status: 'connected'
+            };
+          }
+          return integration;
+        });
+        
+        setIntegrations(updatedIntegrations);
+        setConfigOpen(false);
+        setSelectedIntegration(null);
+      })
+      .catch(err => {
+        console.error('Error connecting integration:', err);
+      })
+      .finally(() => {
+        setIsConnecting(false);
+      });
   };
+
+  // Loading state
+  if (isLoading && integrations.length === 0) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
+        <p className="text-lg font-medium">Loading integrations...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && integrations.length === 0) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
+        <div className="mb-4 rounded-full bg-destructive/10 p-3">
+          <X className="h-10 w-10 text-destructive" />
+        </div>
+        <h2 className="mb-2 text-xl font-bold">Something went wrong</h2>
+        <p className="mb-4 text-center text-muted-foreground">
+          We couldn't load the integrations. Please try again.
+        </p>
+        <Button onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -387,7 +311,16 @@ export function IntegrationsHub() {
                         "flex h-10 w-10 items-center justify-center rounded-md",
                         integration.status === 'connected' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                       )}>
-                        {integration.icon}
+                        {integration.id === 'whatsapp' ? <Smartphone className="h-6 w-6" /> :
+                         integration.id === 'email' ? <Mail className="h-6 w-6" /> :
+                         integration.id === 'google-calendar' ? <Calendar className="h-6 w-6" /> :
+                         integration.id === 'stripe' ? <CreditCard className="h-6 w-6" /> :
+                         integration.id === 'salesforce' ? <Briefcase className="h-6 w-6" /> :
+                         integration.id === 'hubspot' ? <Users className="h-6 w-6" /> :
+                         integration.id === 'slack' ? <MessageSquare className="h-6 w-6" /> :
+                         integration.id === 'shopify' ? <ShoppingCart className="h-6 w-6" /> :
+                         integration.id === 'zendesk' ? <Headphones className="h-6 w-6" /> :
+                         <FileText className="h-6 w-6" />}
                       </div>
                       <div>
                         <CardTitle className="text-base">{integration.name}</CardTitle>
@@ -399,7 +332,7 @@ export function IntegrationsHub() {
                 <CardContent className="space-y-4">
                   {integration.stats && (
                     <div className="grid grid-cols-3 gap-2">
-                      {integration.stats.map((stat, index) => (
+                      {integration.stats.map((stat: any, index: number) => (
                         <div key={index} className="space-y-1">
                           <p className="text-xs text-muted-foreground">{stat.title}</p>
                           <div className="flex items-center gap-1">
@@ -571,7 +504,16 @@ export function IntegrationsHub() {
                           "flex h-10 w-10 items-center justify-center rounded-md",
                           integration.status === 'connected' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                         )}>
-                          {integration.icon}
+                          {integration.id === 'whatsapp' ? <Smartphone className="h-6 w-6" /> :
+                           integration.id === 'email' ? <Mail className="h-6 w-6" /> :
+                           integration.id === 'google-calendar' ? <Calendar className="h-6 w-6" /> :
+                           integration.id === 'stripe' ? <CreditCard className="h-6 w-6" /> :
+                           integration.id === 'salesforce' ? <Briefcase className="h-6 w-6" /> :
+                           integration.id === 'hubspot' ? <Users className="h-6 w-6" /> :
+                           integration.id === 'slack' ? <MessageSquare className="h-6 w-6" /> :
+                           integration.id === 'shopify' ? <ShoppingCart className="h-6 w-6" /> :
+                           integration.id === 'zendesk' ? <Headphones className="h-6 w-6" /> :
+                           <FileText className="h-6 w-6" />}
                         </div>
                         <CardTitle className="text-base">{integration.name}</CardTitle>
                       </div>
@@ -619,7 +561,16 @@ export function IntegrationsHub() {
                       "flex h-8 w-8 items-center justify-center rounded-md",
                       integration.status === 'connected' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                     )}>
-                      {integration.icon}
+                      {integration.id === 'whatsapp' ? <Smartphone className="h-4 w-4" /> :
+                       integration.id === 'email' ? <Mail className="h-4 w-4" /> :
+                       integration.id === 'google-calendar' ? <Calendar className="h-4 w-4" /> :
+                       integration.id === 'stripe' ? <CreditCard className="h-4 w-4" /> :
+                       integration.id === 'salesforce' ? <Briefcase className="h-4 w-4" /> :
+                       integration.id === 'hubspot' ? <Users className="h-4 w-4" /> :
+                       integration.id === 'slack' ? <MessageSquare className="h-4 w-4" /> :
+                       integration.id === 'shopify' ? <ShoppingCart className="h-4 w-4" /> :
+                       integration.id === 'zendesk' ? <Headphones className="h-4 w-4" /> :
+                       <FileText className="h-4 w-4" />}
                     </div>
                     <span className="font-medium">{integration.name}</span>
                   </div>
@@ -768,7 +719,16 @@ export function IntegrationsHub() {
                     "flex h-10 w-10 items-center justify-center rounded-md",
                     selectedIntegration.status === 'connected' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                   )}>
-                    {selectedIntegration.icon}
+                    {selectedIntegration.id === 'whatsapp' ? <Smartphone className="h-6 w-6" /> :
+                     selectedIntegration.id === 'email' ? <Mail className="h-6 w-6" /> :
+                     selectedIntegration.id === 'google-calendar' ? <Calendar className="h-6 w-6" /> :
+                     selectedIntegration.id === 'stripe' ? <CreditCard className="h-6 w-6" /> :
+                     selectedIntegration.id === 'salesforce' ? <Briefcase className="h-6 w-6" /> :
+                     selectedIntegration.id === 'hubspot' ? <Users className="h-6 w-6" /> :
+                     selectedIntegration.id === 'slack' ? <MessageSquare className="h-6 w-6" /> :
+                     selectedIntegration.id === 'shopify' ? <ShoppingCart className="h-6 w-6" /> :
+                     selectedIntegration.id === 'zendesk' ? <Headphones className="h-6 w-6" /> :
+                     <FileText className="h-6 w-6" />}
                   </div>
                   <SheetTitle>{selectedIntegration.name}</SheetTitle>
                 </div>
