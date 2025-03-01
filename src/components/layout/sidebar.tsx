@@ -58,7 +58,7 @@ export function Sidebar({ className, ...props }: SidebarProps) {
   return (
     <div
       className={cn(
-        'relative flex h-screen flex-col border-r bg-gradient-to-b from-card to-card/80 transition-all duration-300 ease-in-out',
+        'relative flex h-screen flex-col items-center border-r bg-gradient-to-b from-card to-card/80 transition-all duration-300 ease-in-out',
         className
       )}
       {...props}
@@ -74,7 +74,7 @@ export function Sidebar({ className, ...props }: SidebarProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="absolute -right-4 top-8 z-10 hidden h-8 w-8 rounded-full border bg-background shadow-md md:flex"
+          className="absolute -right-4 top-8 z-[99] hidden h-8 w-8 rounded-full border bg-background shadow-md md:flex"
           onClick={() => dispatch(toggleSidebar())}
         >
           {sidebarOpen ? (
@@ -84,7 +84,7 @@ export function Sidebar({ className, ...props }: SidebarProps) {
           )}
         </Button>
       </div>
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">
+      <div className={cn(`flex flex-1 flex-col gap-1 overflow-y-auto p-4`,  sidebarOpen && 'w-full')}>
         {navItems.map((item) => (
           <Link
             key={item.href}
